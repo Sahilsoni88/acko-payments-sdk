@@ -2,6 +2,8 @@
 
 This guide shows how a consumer service should use the SDK. Start here.
 
+**v0 (`0.1.0-SNAPSHOT`):** only `paymentClient.payout()` is available. Payin/refund sections below describe the target API and will apply once those surfaces ship.
+
 ---
 
 ## Mental Model
@@ -10,10 +12,10 @@ The SDK exposes **one entry point**: `PaymentClient`.
 
 Under it, operations map to the Central Payment Platform clients:
 
-| SDK surface | Platform client | Responsibility |
-|---|---|---|
-| `paymentClient.payout()` | `PayoutServiceClient` | Disbursals, account/IFSC validation, payout verify |
-| `paymentClient.payin()` | `PayinServiceClient` | Collect money, verify, and refunds |
+| SDK surface | Platform client | Responsibility | v0 |
+|---|---|---|---|
+| `paymentClient.payout()` | `PayoutServiceClient` | Disbursals, account/IFSC validation, payout verify | Available |
+| `paymentClient.payin()` | `PayinServiceClient` | Collect money, verify, and refunds | Upcoming |
 
 There is **no** separate `refund()` entry. Refund APIs are part of `payin()`.
 
@@ -27,15 +29,17 @@ Consumers should **only** inject `PaymentClient`. Never depend on Feign clients,
 <dependency>
     <groupId>com.acko</groupId>
     <artifactId>acko-payments-sdk</artifactId>
-    <version>1.0.0</version>
+    <version>0.1.0-SNAPSHOT</version>
 </dependency>
 ```
+
+Resolve snapshots from Acko Nexus (dev).
 
 ---
 
 ## 2. Configure `application.yml`
 
-Only two payment base URLs are required (plus auth):
+For v0, configure auth + payout (payin is not required until that surface ships):
 
 ```yaml
 payment:
@@ -49,7 +53,7 @@ payment:
       backoff: 500ms
 
   auth:
-    base-url: https://auth.payments.internal
+    token-url: https://auth.payments.internal/oauth/token
     client-id: ${PAYMENT_CLIENT_ID}
     client-secret: ${PAYMENT_CLIENT_SECRET}
     scope: payment.write
@@ -58,10 +62,6 @@ payment:
     base-url: https://payout.payments.internal
     timeout:
       read: 10s
-
-  payin:
-    base-url: https://payin.payments.internal
-    # refund endpoints also use this base-url
 
   token-cache:
     refresh-buffer: 30s
@@ -72,21 +72,21 @@ payment:
 
 ---
 
-## 3. Provide the HybridCache Bean
+## 3. Token cache
+
+v0 uses an in-memory `TokenStore` by default (auto-configured). You may override the `TokenStore` bean if you need a shared cache later.
+
+Non-Spring consumers:
 
 ```java
-@Bean
-public HybridCache<String, OAuthToken> paymentTokenCache(
-        AckoHybridCache orgCache) {
-    return new AckoHybridCache<>(orgCache, "payment-tokens");
-}
+PaymentClient client = PaymentClientFactory.create(sdkConfig);
 ```
 
 ---
 
 ## 4. Recommended Usage Flows
 
-### 4.1 Payout (disburse money)
+### 4.1 Payout (disburse money) — available in v0
 
 Typical claim / refund-to-bank / settlement flow:
 
@@ -113,32 +113,34 @@ public class ClaimPayoutService {
         paymentClient.payout().validateAccountDetails(
             ValidateAccountDetailsRequest.builder()
                 .accountNumber(cmd.getAccountNumber())
-                .ifsc(cmd.getIfscCode())
-                .beneficiaryName(cmd.getBeneficiaryName())
-                .correlationId(cmd.getCorrelationId())
+                .ifscCode(cmd.getIfscCode())
+                .accountHolderName(cmd.getBeneficiaryName())
                 .build()
         );
 
         // 2) Generate platform request id when your flow requires it
         GeneratePayoutRequestIdResponse idResponse =
-            paymentClient.payout().generatePayoutRequestId(
-                GeneratePayoutRequestIdRequest.builder()
-                    .correlationId(cmd.getCorrelationId())
-                    .referenceId(cmd.getClaimId())
-                    .build()
-            );
+            paymentClient.payout().generatePayoutRequestId();
 
-        // 3) Initiate
+        // 3) Initiate — persist payout_request_id before/at this call
         InitiatePayoutResponse response = paymentClient.payout().initiate(
             InitiatePayoutRequest.builder()
-                .correlationId(cmd.getCorrelationId())
+                .okind("claim-management")
+                .oid(cmd.getClaimId())
+                .paymentType("claim")
+                .amount(cmd.getAmount())
+                .requestedById(cmd.getRequestedById())
+                .entityType("customer")
+                .entityId(cmd.getCustomerId())
+                .callbackUrl(cmd.getCallbackUrl())
+                .paymentMode("neft")
                 .payoutRequestId(idResponse.getPayoutRequestId())
-                .amount(Money.ofInr(cmd.getAmount()))
-                .beneficiaryAccountNumber(cmd.getAccountNumber())
-                .beneficiaryIfscCode(cmd.getIfscCode())
-                .beneficiaryName(cmd.getBeneficiaryName())
-                .mode(PaymentMode.NEFT)
-                .referenceId(cmd.getClaimId())
+                .uniqueId(cmd.getIdempotencyKey()) // optional, if platform supports
+                .paymentInstrument(PaymentInstrument.builder()
+                    .accountNumber(cmd.getAccountNumber())
+                    .ifscCode(cmd.getIfscCode())
+                    .accountHolderName(cmd.getBeneficiaryName())
+                    .build())
                 .build()
         );
 
@@ -152,9 +154,12 @@ public class ClaimPayoutService {
 ```java
 paymentClient.payout().updatePayoutDetails(
     UpdatePayoutDetailsRequest.builder()
-        .payoutRequestId(payoutRequestId)
-        .correlationId(correlationId)
-        // fields allowed by platform update contract
+        .id(Long.valueOf(payoutRequestId))
+        .amount(updatedAmount)
+        .paymentInstrument(updatedInstrument)
+        .requestedById(requestedById)
+        .paymentMode("neft")
+        .callbackUrl(callbackUrl)
         .build()
 );
 ```
@@ -165,14 +170,14 @@ paymentClient.payout().updatePayoutDetails(
 VerifyPayoutResponse status =
     paymentClient.payout().verify(payoutRequestId);
 
-if (status.getStatus() == PaymentStatus.SUCCESS) {
+if (status.getPaymentStatus() == PaymentStatus.SUCCESS) {
     // proceed
 }
 ```
 
 ---
 
-### 4.2 Payin (collect money)
+### 4.2 Payin (collect money) — upcoming (post-v0)
 
 ```text
 createOrder (order-details-ekey)
@@ -209,7 +214,7 @@ VerifyPayinResponse legacy = paymentClient.payin().verify(orderId);
 
 ---
 
-### 4.3 Refund (under payin)
+### 4.3 Refund (under payin) — upcoming (post-v0)
 
 Refunds are a two-step flow on the same Payin client:
 
@@ -296,13 +301,12 @@ public MetricsHook paymentMetricsHook(MeterRegistry registry) {
 
 ---
 
-## 9. Minimal Checklist for a New Integrator
+## 9. Minimal Checklist for a New Integrator (v0)
 
-1. Add SDK dependency  
-2. Configure `auth`, `payout`, `payin`  
-3. Provide `HybridCache` bean  
-4. Inject `PaymentClient`  
-5. Implement one flow (payout **or** payin) end-to-end  
-6. Add exception handling + timeout → verify recovery  
-7. Subscribe to SQS events for final status  
-8. Add metrics hook (optional)
+1. Add SDK dependency (`0.1.0-SNAPSHOT`)  
+2. Configure `payment.auth.token-url`, credentials, and `payment.payout.base-url`  
+3. Inject `PaymentClient` (or use `PaymentClientFactory` without Spring)  
+4. Implement payout end-to-end (validate → generate id → initiate → verify on timeout)  
+5. Add exception handling + timeout → `verify` recovery (never blind-retry initiate)  
+6. Subscribe to SQS events for final status  
+7. Add `MetricsHook` bean (optional)

@@ -4,18 +4,22 @@
 
 ```
 com.acko.payment.sdk
-├── api/            → PaymentClient, PayoutOperations, PayinOperations
+├── api/            → PaymentClient, PayoutOperations (PayinOperations post-v0)
 ├── auth/           → TokenManager, TokenStore, AuthService, OAuthToken
-├── cache/          → HybridCache adapter interface
+├── cache/          → Reserved for shared/cache adapters (v0 uses InMemoryTokenStore)
 ├── common/         → RequestExecutor, RetryExecutor, ExceptionMapper, FeignInterceptor
-├── config/         → PaymentProperties, ConfigResolver, PaymentAutoConfiguration
+├── config/         → Framework-neutral SdkConfig + timeout/retry/auth settings
+├── factory/        → PaymentClientFactory (non-Spring entry)
+├── spring/         → PaymentProperties, PaymentAutoConfiguration (Spring-only)
 ├── events/         → Optional hooks / constants related to payment events (no SQS listeners)
 ├── exception/      → SDK exception hierarchy
 ├── model/          → Shared value objects (Money, PaymentStatus, PaymentMode)
-├── payin/          → Payin + refund models, PayinFeignClient, DefaultPayinService
+├── payin/          → Payin + refund models (post-v0)
 ├── payout/         → Payout models, PayoutFeignClient, DefaultPayoutService
 └── util/           → MaskingUtils, CorrelationIdHolder
 ```
+
+> Core packages must remain Spring-free. Spring types live only under `spring/`.
 
 > Refund request/response models live under `payin/` and are exposed through `PayinOperations`.
 
