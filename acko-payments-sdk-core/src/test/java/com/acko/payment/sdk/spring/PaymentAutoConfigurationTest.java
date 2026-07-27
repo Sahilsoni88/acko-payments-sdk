@@ -32,11 +32,13 @@ class PaymentAutoConfigurationTest {
     }
 
     @Test
-    void should_notLoadAutoConfig_whenPayoutCookieHeaderMissing() {
+    void should_notLoadAutoConfig_whenPayoutCookieHeaderDisabled() {
         // given
         ApplicationContextRunner runner = new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(PaymentAutoConfiguration.class))
-                .withPropertyValues("payment.payout.base-url=https://payout.example");
+                .withPropertyValues(
+                        "payment.payout.base-url=https://payout.example",
+                        "payment.payout.cookie-header=false");
 
         // when / then
         runner.run(context -> assertThat(context).doesNotHaveBean(PaymentClient.class));
