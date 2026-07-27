@@ -99,6 +99,10 @@ Typical claim / refund-to-bank / settlement flow:
      → verify (sync)  and/or  SQS event (async)
 ```
 
+V0 payout request objects intentionally mirror Central Payment Platform field names. For example,
+`InitiatePayoutRequest` uses `okind`, `oid`, `paymentType`, `paymentMode`, `uniqueId`, and
+`BigDecimal amount` instead of a higher-level SDK-specific payout command object.
+
 ```java
 @Service
 @RequiredArgsConstructor

@@ -6,7 +6,7 @@ import feign.RequestTemplate;
 /**
  * Adds Authorization from {@link AccessTokenHolder}. Package-private usage via Feign builder.
  */
-public final class PaymentFeignInterceptor implements RequestInterceptor {
+final class PaymentFeignInterceptor implements RequestInterceptor {
 
     @Override
     public void apply(RequestTemplate template) {

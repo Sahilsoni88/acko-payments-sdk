@@ -2,6 +2,7 @@ package com.acko.payment.sdk.common;
 
 import com.acko.payment.sdk.config.RetrySettings;
 import com.acko.payment.sdk.exception.DownstreamException;
+import com.acko.payment.sdk.exception.PaymentTimeoutException;
 import com.acko.payment.sdk.exception.RetryableException;
 import com.acko.payment.sdk.exception.ValidationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +84,42 @@ class RetryExecutorTest {
             attempts.incrementAndGet();
             throw new ValidationException("bad");
         })).isInstanceOf(ValidationException.class);
+
+        assertThat(attempts.get()).isEqualTo(1);
+    }
+
+    @Test
+    void should_retryAndSucceed_whenRetrySafeTimeoutThenOk() {
+        // given
+        AtomicInteger attempts = new AtomicInteger();
+        RequestContext context = new RequestContext(
+                "verify", "corr-1", new RetrySettings(true, 3, Duration.ofMillis(1)), true);
+
+        // when
+        String result = retryExecutor.execute(context, () -> {
+            if (attempts.incrementAndGet() < 2) {
+                throw new PaymentTimeoutException("timed out");
+            }
+            return "ok";
+        });
+
+        // then
+        assertThat(result).isEqualTo("ok");
+        assertThat(attempts.get()).isEqualTo(2);
+    }
+
+    @Test
+    void should_notRetryTimeout_whenNotRetrySafe() {
+        // given
+        AtomicInteger attempts = new AtomicInteger();
+        RequestContext context = new RequestContext(
+                "initiate", "corr-1", new RetrySettings(true, 3, Duration.ofMillis(1)), false);
+
+        // when / then
+        assertThatThrownBy(() -> retryExecutor.execute(context, () -> {
+            attempts.incrementAndGet();
+            throw new PaymentTimeoutException("timed out");
+        })).isInstanceOf(PaymentTimeoutException.class);
 
         assertThat(attempts.get()).isEqualTo(1);
     }

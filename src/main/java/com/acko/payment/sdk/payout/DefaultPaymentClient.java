@@ -8,11 +8,11 @@ import java.util.Objects;
 /**
  * Package-private {@link PaymentClient} implementation for v0 (payout only).
  */
-public final class DefaultPaymentClient implements PaymentClient {
+final class DefaultPaymentClient implements PaymentClient {
 
     private final PayoutOperations payoutOperations;
 
-    public DefaultPaymentClient(PayoutOperations payoutOperations) {
+    DefaultPaymentClient(PayoutOperations payoutOperations) {
         this.payoutOperations = Objects.requireNonNull(payoutOperations, "payoutOperations");
     }
 

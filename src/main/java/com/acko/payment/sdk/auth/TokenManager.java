@@ -1,6 +1,8 @@
 package com.acko.payment.sdk.auth;
 
+import com.acko.payment.sdk.config.AuthSettings;
 import com.acko.payment.sdk.config.TokenCacheSettings;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +22,15 @@ public class TokenManager {
     private final TokenCacheSettings cacheSettings;
     private final ReentrantLock lock = new ReentrantLock();
 
-    public TokenManager(AuthService authService, TokenStore tokenStore, TokenCacheSettings cacheSettings) {
+    public TokenManager(
+            AuthSettings authSettings,
+            ObjectMapper objectMapper,
+            TokenStore tokenStore,
+            TokenCacheSettings cacheSettings) {
+        this(new AuthService(authSettings, objectMapper), tokenStore, cacheSettings);
+    }
+
+    TokenManager(AuthService authService, TokenStore tokenStore, TokenCacheSettings cacheSettings) {
         this.authService = Objects.requireNonNull(authService, "authService");
         this.tokenStore = Objects.requireNonNull(tokenStore, "tokenStore");
         this.cacheSettings = Objects.requireNonNull(cacheSettings, "cacheSettings");

@@ -1,7 +1,6 @@
 package com.acko.payment.sdk.factory;
 
 import com.acko.payment.sdk.api.PaymentClient;
-import com.acko.payment.sdk.auth.AuthService;
 import com.acko.payment.sdk.auth.InMemoryTokenStore;
 import com.acko.payment.sdk.auth.TokenManager;
 import com.acko.payment.sdk.auth.TokenStore;
@@ -44,8 +43,11 @@ public final class PaymentClientFactory {
                 ? new FeignClientFactory()
                 : new FeignClientFactory(objectMapper);
 
-        AuthService authService = new AuthService(config.getAuth(), feignClientFactory.getObjectMapper());
-        TokenManager tokenManager = new TokenManager(authService, tokenStore, config.getTokenCache());
+        TokenManager tokenManager = new TokenManager(
+                config.getAuth(),
+                feignClientFactory.getObjectMapper(),
+                tokenStore,
+                config.getTokenCache());
         ExceptionMapper exceptionMapper = new ExceptionMapper();
         RetryExecutor retryExecutor = new RetryExecutor(exceptionMapper);
         RequestExecutor requestExecutor = new RequestExecutor(

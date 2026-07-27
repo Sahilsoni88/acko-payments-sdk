@@ -20,7 +20,7 @@ import java.util.Objects;
 /**
  * Fetches OAuth2 tokens via client-credentials grant using JDK {@link HttpClient}.
  */
-public class AuthService {
+class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 

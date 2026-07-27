@@ -41,7 +41,7 @@ com.acko.payment.sdk
 ## Public Operations (target API)
 
 ### `PayoutOperations`
-- `generatePayoutRequestId(GeneratePayoutRequestIdRequest) → GeneratePayoutRequestIdResponse`
+- `generatePayoutRequestId() → GeneratePayoutRequestIdResponse`
 - `verifyIfsc(String ifsc) → VerifyIfscResponse`
 - `validateAccountDetails(ValidateAccountDetailsRequest) → ValidateAccountDetailsResponse`
 - `initiate(InitiatePayoutRequest) → InitiatePayoutResponse`

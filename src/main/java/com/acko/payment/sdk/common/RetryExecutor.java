@@ -2,6 +2,7 @@ package com.acko.payment.sdk.common;
 
 import com.acko.payment.sdk.config.RetrySettings;
 import com.acko.payment.sdk.exception.DownstreamException;
+import com.acko.payment.sdk.exception.PaymentTimeoutException;
 import com.acko.payment.sdk.exception.RetryableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,7 @@ public final class RetryExecutor {
                 : settings.getMaxAttempts();
 
         RetryableException lastRetryable = null;
+        PaymentTimeoutException lastTimeout = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 return call.get();
@@ -39,6 +41,14 @@ public final class RetryExecutor {
                 }
                 log.warn("Retrying operation={} attempt={}/{} reason={}",
                         context.getOperation(), attempt, maxAttempts, retryable.getMessage());
+                sleep(settings);
+            } catch (PaymentTimeoutException timeout) {
+                lastTimeout = timeout;
+                if (attempt >= maxAttempts) {
+                    break;
+                }
+                log.warn("Retrying operation={} attempt={}/{} reason={}",
+                        context.getOperation(), attempt, maxAttempts, timeout.getMessage());
                 sleep(settings);
             } catch (RuntimeException runtime) {
                 RuntimeException mapped = exceptionMapper.map(runtime);
@@ -52,8 +62,21 @@ public final class RetryExecutor {
                     sleep(settings);
                     continue;
                 }
+                if (mapped instanceof PaymentTimeoutException timeout) {
+                    lastTimeout = timeout;
+                    if (attempt >= maxAttempts) {
+                        break;
+                    }
+                    log.warn("Retrying operation={} attempt={}/{} reason={}",
+                            context.getOperation(), attempt, maxAttempts, timeout.getMessage());
+                    sleep(settings);
+                    continue;
+                }
                 throw mapped;
             }
+        }
+        if (lastTimeout != null) {
+            throw lastTimeout;
         }
         throw new DownstreamException(
                 "Retries exhausted for operation=" + context.getOperation(),
