@@ -2,7 +2,7 @@
 
 This guide shows how a consumer service should use the SDK. Start here.
 
-**v0 (`0.1.0-SNAPSHOT`):** only `paymentClient.payout()` is available. Payin/refund sections below describe the target API and will apply once those surfaces ship.
+**v0 (`0.1.1-SNAPSHOT`):** only `paymentClient.payout()` is available. Payin/refund sections below describe the target API and will apply once those surfaces ship.
 
 ---
 
@@ -29,7 +29,7 @@ Consumers should **only** inject `PaymentClient`. Never depend on Feign clients,
 <dependency>
     <groupId>com.acko</groupId>
     <artifactId>acko-payments-sdk</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -39,7 +39,7 @@ Resolve snapshots from Acko Nexus (dev).
 
 ## 2. Configure `application.yml`
 
-For v0, configure auth + payout (payin is not required until that surface ships):
+For v0, configure payout base URL and the internal payout cookie. S2S bearer-token auth is for payin/future surfaces, not payout.
 
 ```yaml
 payment:
@@ -52,29 +52,20 @@ payment:
       max-attempts: 3
       backoff: 500ms
 
-  auth:
-    token-url: https://auth.payments.internal/oauth/token
-    client-id: ${PAYMENT_CLIENT_ID}
-    client-secret: ${PAYMENT_CLIENT_SECRET}
-    scope: payment.write
-
   payout:
     base-url: https://payout.payments.internal
+    cookie-header: ${INTERNAL_PAYOUT_COOKIE}
     timeout:
       read: 10s
-
-  token-cache:
-    refresh-buffer: 30s
-    cache-key: acko-payment-sdk:oauth-token
 ```
 
-> Never hardcode secrets. Load `client-id` / `client-secret` from env or secrets manager.
+> `INTERNAL_PAYOUT_COOKIE` should be the raw Cookie header value, for example `internalPayoutCookie=...`. Never hardcode it; load it from env or secrets manager.
 
 ---
 
-## 3. Token cache
+## 3. Auth model
 
-v0 uses an in-memory `TokenStore` by default (auto-configured). You may override the `TokenStore` bean if you need a shared cache later.
+Payout uses the configured Cookie header directly and does not fetch an OAuth token. S2S bearer-token support and the in-memory `TokenStore` remain available for payin/future surfaces.
 
 Non-Spring consumers:
 
@@ -119,6 +110,7 @@ public class ClaimPayoutService {
                 .accountNumber(cmd.getAccountNumber())
                 .ifscCode(cmd.getIfscCode())
                 .accountHolderName(cmd.getBeneficiaryName())
+                .accountType("bank")
                 .build()
         );
 
@@ -129,7 +121,7 @@ public class ClaimPayoutService {
         // 3) Initiate — persist payout_request_id before/at this call
         InitiatePayoutResponse response = paymentClient.payout().initiate(
             InitiatePayoutRequest.builder()
-                .okind("claim-management")
+                .okind("jarvis")
                 .oid(cmd.getClaimId())
                 .paymentType("claim")
                 .amount(cmd.getAmount())
@@ -137,7 +129,7 @@ public class ClaimPayoutService {
                 .entityType("customer")
                 .entityId(cmd.getCustomerId())
                 .callbackUrl(cmd.getCallbackUrl())
-                .paymentMode("neft")
+                .paymentMode("bank")
                 .payoutRequestId(idResponse.getPayoutRequestId())
                 .uniqueId(cmd.getIdempotencyKey()) // optional, if platform supports
                 .paymentInstrument(PaymentInstrument.builder()
@@ -148,7 +140,7 @@ public class ClaimPayoutService {
                 .build()
         );
 
-        return response.getPayoutRequestId();
+        return idResponse.getPayoutRequestId();
     }
 }
 ```
@@ -162,7 +154,7 @@ paymentClient.payout().updatePayoutDetails(
         .amount(updatedAmount)
         .paymentInstrument(updatedInstrument)
         .requestedById(requestedById)
-        .paymentMode("neft")
+        .paymentMode("bank")
         .callbackUrl(callbackUrl)
         .build()
 );
@@ -174,7 +166,7 @@ paymentClient.payout().updatePayoutDetails(
 VerifyPayoutResponse status =
     paymentClient.payout().verify(payoutRequestId);
 
-if (status.getPaymentStatus() == PaymentStatus.SUCCESS) {
+if (status.getPaymentStatus() == PaymentStatus.COMPLETED) {
     // proceed
 }
 ```
@@ -251,6 +243,8 @@ InitiateRefundResponse initiated = paymentClient.payin().initiateRefund(
 ```java
 try {
     InitiatePayoutResponse response = paymentClient.payout().initiate(request);
+    // For the legacy route, use:
+    // InitiatePayoutResponse response = paymentClient.payout().initiateV1(request);
 } catch (ValidationException e) {
     // 4xx — fix request, do not retry blindly
 } catch (AuthenticationException e) {
@@ -295,7 +289,7 @@ public MetricsHook paymentMetricsHook(MeterRegistry registry) {
 | ❌ Don't | ✅ Do instead |
 |---|---|
 | Call platform URLs / Feign clients directly | Use `PaymentClient` only |
-| Inject `TokenManager` | SDK owns token lifecycle |
+| Inject `TokenManager` for payout | Configure `payment.payout.cookie-header` |
 | Treat callback alone as final success | Confirm with `verify`/`verifyV2` and/or SQS |
 | Skip account/IFSC checks before payout | Call `verifyIfsc` + `validateAccountDetails` |
 | Expect `paymentClient.refund()` | Use `paymentClient.payin().createRefund` / `initiateRefund` |
@@ -307,8 +301,8 @@ public MetricsHook paymentMetricsHook(MeterRegistry registry) {
 
 ## 9. Minimal Checklist for a New Integrator (v0)
 
-1. Add SDK dependency (`0.1.0-SNAPSHOT`)  
-2. Configure `payment.auth.token-url`, credentials, and `payment.payout.base-url`  
+1. Add SDK dependency (`0.1.1-SNAPSHOT`)  
+2. Configure `payment.payout.base-url` and `payment.payout.cookie-header`  
 3. Inject `PaymentClient` (or use `PaymentClientFactory` without Spring)  
 4. Implement payout end-to-end (validate → generate id → initiate → verify on timeout)  
 5. Add exception handling + timeout → `verify` recovery (never blind-retry initiate)  

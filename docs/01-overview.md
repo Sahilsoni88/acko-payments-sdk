@@ -1,6 +1,6 @@
 # Payment SDK — Overview
 
-**Current release line:** `0.1.0-SNAPSHOT` (v0) — **payout only**. Payin and refund APIs are planned for later minor releases.
+**Current release line:** `0.1.1-SNAPSHOT` (v0) — **payout only**. Payin and refund APIs are planned for later minor releases.
 
 ## What is it?
 
@@ -14,7 +14,7 @@ Instead of each service implementing its own authentication, retry, timeout, and
 
 Before the SDK, every team that needed to process payments had to:
 
-- Implement OAuth2 token management independently
+- Handle service authentication independently
 - Write their own retry and timeout logic
 - Handle HTTP errors inconsistently
 - Maintain boilerplate integration code against payout/payin endpoints
@@ -29,6 +29,7 @@ The SDK wraps two platform HTTP clients:
 
 ### PayoutServiceClient
 - `POST /api/v2/initiate_payout`
+- `POST /api/initiate_payout/`
 - `POST /api/v2/update_payout_details`
 - `POST /api/validate/account_details`
 - `GET /api/ifsc-verify?ifsc={ifsc}`
@@ -48,7 +49,7 @@ The SDK wraps two platform HTTP clients:
 
 | Capability | v0 | Description |
 |---|---|---|
-| **Authentication** | Yes | OAuth2 Client Credentials, automatic token refresh, in-memory token caching |
+| **Authentication** | Yes | Payout uses `Cookie: internalPayoutCookie=...`; S2S bearer-token support is retained for payin/future surfaces |
 | **Payout** | Yes | Generate request id, IFSC/account validation, initiate, update, verify |
 | **Payin** | Later | Create order (ekey), verify, verify v2 |
 | **Refund** | Later | Create + initiate via `payin()` (same PayinServiceClient) |
@@ -88,5 +89,13 @@ Any internal Java Spring Boot service that needs to interact with the Central Pa
 - Java 21
 - Framework-neutral core + optional Spring Boot 3.x auto-configuration
 - OpenFeign core (HTTP client)
-- OAuth2 Client Credentials (JDK `HttpClient`)
-- In-memory token cache (pluggable `TokenStore`)
+- Payout Cookie auth
+- OAuth2 Client Credentials support for S2S bearer-token surfaces
+
+## Repository Modules
+
+```
+acko-payments-sdk/
+├── acko-payments-sdk-core     # published SDK artifact: com.acko:acko-payments-sdk
+└── acko-payments-sdk-example  # local Spring Boot manual-test app, not deployed
+```

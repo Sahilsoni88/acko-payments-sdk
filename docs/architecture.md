@@ -10,11 +10,11 @@ graph TD
         API["Public API Layer\nPaymentClient\nPayoutOperations · PayinOperations"]
         SVC["Application Services\nDefaultPayoutService · DefaultPayinService"]
         INFRA["Infrastructure\nRequestExecutor · RetryExecutor\nExceptionMapper · MetricsHook"]
-        AUTH["Auth Layer\nTokenManager · TokenStore · AuthService"]
+        AUTH["Auth Layer\nCookieHolder · TokenManager · TokenStore · AuthService"]
         HTTP["HTTP Client Layer\nPayoutFeignClient\nPayinFeignClient"]
     end
 
-    AS["Auth Server\n(OAuth2)"]
+    AS["Auth Server\n(OAuth2 for payin/future surfaces)"]
     PAYOUT["Payout Platform\nPayoutServiceClient APIs"]
     PAYIN["Payin Platform\nPayinServiceClient APIs\n(orders · verify · refund)"]
 
@@ -76,12 +76,12 @@ graph LR
 - `MetricsHook` — pluggable metrics
 
 ### Auth Layer
-- `TokenManager`, `TokenStore` / `HybridCacheTokenStore`, `AuthService`
-- Hidden from consumers
+- `CookieHolder`, `TokenManager`, `TokenStore`, `AuthService`
+- Hidden from consumers; payout uses the configured Cookie header, while S2S bearer tokens are retained for payin/future surfaces
 
 ### HTTP Client Layer
 - Package-private Feign clients only
-- `PaymentFeignInterceptor` adds `Authorization` from thread-local
+- `PaymentFeignInterceptor` adds request-scoped auth headers: `Cookie` for payout, `Authorization` for S2S bearer-token surfaces
 - One Feign client per platform service (Payout, Payin)
 
 ---
@@ -92,6 +92,7 @@ graph LR
 | Method | Path |
 |---|---|
 | POST | `/api/v2/initiate_payout` |
+| POST | `/api/initiate_payout/` |
 | POST | `/api/v2/update_payout_details` |
 | POST | `/api/validate/account_details` |
 | GET | `/api/ifsc-verify?ifsc={ifsc}` |

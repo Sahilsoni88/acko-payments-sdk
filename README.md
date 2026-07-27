@@ -2,11 +2,11 @@
 
 Internal Java library for calling the Central Payment Platform from Acko services.
 
-One entry point — `PaymentClient` — with OAuth2 auth, token caching, retries, timeouts, and typed errors. Consumers should not wire Feign clients or token managers themselves.
+One entry point — `PaymentClient` — with payout cookie auth, retries, timeouts, and typed errors. Consumers should not wire Feign clients themselves.
 
 | | |
 |---|---|
-| **Artifact** | `com.acko:acko-payments-sdk:0.1.0-SNAPSHOT` |
+| **Artifact** | `com.acko:acko-payments-sdk:0.1.1-SNAPSHOT` |
 | **Java** | 21+ |
 | **Spring** | Optional (Boot 3.x auto-config) |
 | **v0 scope** | Payout only (`paymentClient.payout()`) |
@@ -19,7 +19,7 @@ Payin and refund ship in later releases. Full consumer guide: [docs/04-integrati
 
 Teams that need payout/payin historically each reimplemented:
 
-- OAuth2 client-credentials + token refresh
+- Payout cookie headers / service authentication
 - Retry / timeout behavior
 - Platform HTTP error handling
 
@@ -35,7 +35,7 @@ The SDK centralizes that so Claims, Policy, Motor, Health, and others share one 
 <dependency>
     <groupId>com.acko</groupId>
     <artifactId>acko-payments-sdk</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -53,19 +53,12 @@ payment:
       enabled: true
       max-attempts: 3
       backoff: 500ms
-  auth:
-    token-url: https://auth.payments.internal/oauth/token
-    client-id: ${PAYMENT_CLIENT_ID}
-    client-secret: ${PAYMENT_CLIENT_SECRET}
-    scope: payment.write
   payout:
     base-url: https://payout.payments.internal
-  token-cache:
-    refresh-buffer: 30s
-    cache-key: acko-payment-sdk:oauth-token
+    cookie-header: ${INTERNAL_PAYOUT_COOKIE}
 ```
 
-Never hardcode secrets — use env or secrets manager.
+`INTERNAL_PAYOUT_COOKIE` should be the raw Cookie header value, for example `internalPayoutCookie=...`. Never hardcode secrets — use env or secrets manager.
 
 ### 3. Use `PaymentClient`
 
@@ -84,6 +77,7 @@ public class ClaimPayoutService {
                 .accountNumber(cmd.getAccountNumber())
                 .ifscCode(cmd.getIfscCode())
                 .accountHolderName(cmd.getBeneficiaryName())
+                .accountType("bank")
                 .build());
 
         GeneratePayoutRequestIdResponse idResponse =
@@ -92,7 +86,7 @@ public class ClaimPayoutService {
         // Persist payout_request_id before/at initiate
         InitiatePayoutResponse response = paymentClient.payout().initiate(
             InitiatePayoutRequest.builder()
-                .okind("claim-management")
+                .okind("jarvis")
                 .oid(cmd.getClaimId())
                 .paymentType("claim")
                 .amount(cmd.getAmount())
@@ -100,7 +94,7 @@ public class ClaimPayoutService {
                 .entityType("customer")
                 .entityId(cmd.getCustomerId())
                 .callbackUrl(cmd.getCallbackUrl())
-                .paymentMode("neft")
+                .paymentMode("bank")
                 .payoutRequestId(idResponse.getPayoutRequestId())
                 .paymentInstrument(PaymentInstrument.builder()
                     .accountNumber(cmd.getAccountNumber())
@@ -109,7 +103,7 @@ public class ClaimPayoutService {
                     .build())
                 .build());
 
-        return response.getPayoutRequestId();
+        return idResponse.getPayoutRequestId();
     }
 }
 ```
@@ -133,8 +127,11 @@ try {
 
 ```java
 SdkConfig config = SdkConfig.builder()
-    .auth(new AuthSettings(tokenUrl, clientId, clientSecret, scope))
-    .payout(new ServiceSettings(payoutBaseUrl, null, null))
+    .payout(new ServiceSettings(
+        payoutBaseUrl,
+        null,
+        null,
+        "internalPayoutCookie=" + internalPayoutCookie))
     .build();
 
 PaymentClient client = PaymentClientFactory.create(config);
@@ -152,6 +149,7 @@ PaymentClient
       ├── verifyIfsc(ifsc)
       ├── validateAccountDetails(request)
       ├── initiate(request)
+      ├── initiateV1(request)
       ├── updatePayoutDetails(request)
       └── verify(payoutRequestId)
 ```
@@ -162,6 +160,7 @@ PaymentClient
 | `verifyIfsc` | `GET /api/ifsc-verify` |
 | `validateAccountDetails` | `POST /api/validate/account_details` |
 | `initiate` | `POST /api/v2/initiate_payout` |
+| `initiateV1` | `POST /api/initiate_payout/` |
 | `updatePayoutDetails` | `POST /api/v2/update_payout_details` |
 | `verify` | `GET /api/{payout_request_id}/verify` |
 
@@ -171,7 +170,7 @@ PaymentClient
 
 | Does | Does not |
 |---|---|
-| OAuth2 + token cache + refresh | Persist payment state |
+| Payout Cookie header propagation | Persist payment state |
 | Payout HTTP calls via Feign | Own business workflows / sagas |
 | Configurable retry & timeouts | SQS / SNS listeners |
 | Typed exceptions + safe logging | Async status polling |
@@ -183,14 +182,43 @@ PaymentClient
 
 ```bash
 mvn clean test
-mvn clean package
+mvn -pl acko-payments-sdk-core clean package
 ```
 
 Core packages must stay Spring-free:
 
 ```bash
-rg "org\\.springframework" src/main/java/com/acko/payment/sdk --glob '!**/spring/**'
+rg "org\\.springframework" acko-payments-sdk-core/src/main/java/com/acko/payment/sdk --glob '!**/spring/**'
 ```
+
+---
+
+## Example app
+
+Use `acko-payments-sdk-example` for local/manual payout testing. The published SDK artifact still comes only from `acko-payments-sdk-core`; the example module is marked `maven.deploy.skip=true`.
+
+```bash
+cp .env.example .env
+# edit .env with the actual Cookie header value
+set -a
+source .env
+set +a
+mvn -pl acko-payments-sdk-example spring-boot:run
+```
+
+Spring Boot/Maven do not automatically load `.env`; source it before running the example app.
+
+Example endpoints:
+
+| Method | Path |
+|---|---|
+| GET | `/api/test/paymentsdk/payout/ifsc?ifsc=SBIN0017118` |
+| POST | `/api/test/paymentsdk/payout/request-id` |
+| POST | `/api/test/paymentsdk/payout/validate-account` |
+| POST | `/api/test/paymentsdk/payout/initiate-v2` |
+| POST | `/api/test/paymentsdk/payout/initiate-v1` |
+| POST | `/api/test/paymentsdk/payout/update` |
+| GET | `/api/test/paymentsdk/payout/{payoutRequestId}/verify` |
 
 ---
 
@@ -199,8 +227,8 @@ rg "org\\.springframework" src/main/java/com/acko/payment/sdk --glob '!**/spring
 Maven profiles write to Acko Nexus. Configure `~/.m2/settings.xml` with servers `release`, `dev-snapshots`, and `prod-snapshots`.
 
 ```bash
-mvn clean deploy -Pdev    # snapshots / release candidates
-mvn clean deploy -Pprod   # production releases only
+mvn -pl acko-payments-sdk-core clean deploy -Pdev    # snapshots / release candidates
+mvn -pl acko-payments-sdk-core clean deploy -Pprod   # production releases only
 ```
 
 Branching and SemVer rules: [.cursor/rules/payment-sdk.md](.cursor/rules/payment-sdk.md).
@@ -226,7 +254,7 @@ Branching and SemVer rules: [.cursor/rules/payment-sdk.md](.cursor/rules/payment
 
 | Version | Focus |
 |---|---|
-| `0.1.0` (v0) | Payout + auth/retry/timeout/errors |
+| `0.1.x` (v0) | Payout + auth/retry/timeout/errors |
 | `0.2.0` | Payin `createOrder` + `verify` / `verifyV2` |
 | `0.3.0` | Refund `create` → `initiate` under `payin()` |
 | `1.0.0` | GA after pilot + polish |

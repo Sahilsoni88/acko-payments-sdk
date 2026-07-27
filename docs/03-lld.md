@@ -2,6 +2,16 @@
 
 ## Package Structure
 
+Repository modules:
+
+```
+acko-payments-sdk/
+├── acko-payments-sdk-core     → published SDK jar
+└── acko-payments-sdk-example  → local Spring Boot testing app, skipped during deploy
+```
+
+Core package structure:
+
 ```
 com.acko.payment.sdk
 ├── api/            → PaymentClient, PayoutOperations (PayinOperations post-v0)
@@ -32,7 +42,7 @@ com.acko.payment.sdk
 | **Public API** | `PaymentClient`, `PayoutOperations`, `PayinOperations` | Interface only |
 | **Service** | `DefaultPayoutService`, `DefaultPayinService` | API → `RequestContext` + Feign call |
 | **Infrastructure** | `RequestExecutor`, `RetryExecutor`, `ExceptionMapper` | Cross-cutting concerns |
-| **Auth** | `TokenManager`, `TokenStore`, `AuthService` | Token lifecycle only |
+| **Auth** | `CookieHolder`, `TokenManager`, `TokenStore`, `AuthService` | Payout Cookie lifecycle + future S2S token lifecycle |
 | **Feign** | `PayoutFeignClient`, `PayinFeignClient` | HTTP mapping only; package-private |
 | **Config** | `PaymentProperties`, `ConfigResolver` | Hierarchical config |
 
@@ -45,6 +55,7 @@ com.acko.payment.sdk
 - `verifyIfsc(String ifsc) → VerifyIfscResponse`
 - `validateAccountDetails(ValidateAccountDetailsRequest) → ValidateAccountDetailsResponse`
 - `initiate(InitiatePayoutRequest) → InitiatePayoutResponse`
+- `initiateV1(InitiatePayoutRequest) → InitiatePayoutResponse`
 - `updatePayoutDetails(UpdatePayoutDetailsRequest) → UpdatePayoutDetailsResponse`
 - `verify(String payoutRequestId) → VerifyPayoutResponse`
 
@@ -63,6 +74,7 @@ com.acko.payment.sdk
 | Operation | HTTP | Path |
 |---|---|---|
 | initiate | POST | `/api/v2/initiate_payout` |
+| initiateV1 | POST | `/api/initiate_payout/` |
 | updatePayoutDetails | POST | `/api/v2/update_payout_details` |
 | validateAccountDetails | POST | `/api/validate/account_details` |
 | verifyIfsc | GET | `/api/ifsc-verify` |
@@ -87,31 +99,16 @@ sequenceDiagram
     participant C as Consumer
     participant PS as DefaultPayoutService
     participant RE as RequestExecutor
-    participant TM as TokenManager
-    participant TS as TokenStore
-    participant AS as AuthService
     participant RT as RetryExecutor
     participant FC as PayoutFeignClient
     participant CPP as Payout Platform
 
     C->>PS: initiate(request)
-    PS->>RE: execute(context, feignCall)
-    RE->>TM: getValidToken()
-    TM->>TS: get(cacheKey)
-
-    alt Cache Hit
-        TS-->>TM: OAuthToken
-    else Cache Miss
-        TM->>AS: fetchToken()
-        AS-->>TM: OAuthToken
-        TM->>TS: store(key, token, ttl)
-    end
-
-    TM-->>RE: accessToken
-    Note over RE: set token in ThreadLocal
+    PS->>RE: cookieAuthenticated(context, feignCall)
+    Note over RE: set configured payout Cookie in ThreadLocal
     RE->>RT: execute(context, feignCall)
     RT->>FC: initiate(request)
-    Note over FC: Interceptor adds Authorization
+    Note over FC: Interceptor adds Cookie
     FC->>CPP: POST /api/v2/initiate_payout
     CPP-->>FC: InitiatePayoutResponse
     FC-->>RT: response

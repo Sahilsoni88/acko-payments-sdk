@@ -226,11 +226,30 @@
 
 **Base URL:** `${acko.payout-service.url}`
 
+Flow diagrams below are based on the payout-service implementation:
+`PaymentController`, `AccountValidationController`, `IfscValidationController`,
+`AuthenticationFilter`, `AuthFilterV2`, `PaymentService`, `AccountValidationService`,
+and `IfscValidateService`.
+
 ### 1. Generate Payout Request ID
 
 **Endpoint:** `POST /api/generate_payout_request_id`
 
 **Purpose:** Allocate and generate a unique platform payout request ID
+
+**Service Flow:**
+
+```mermaid
+flowchart TD
+    A["SDK / Consumer"] --> B["PaymentController.generatePayoutRequestId"]
+    B --> C["UniqueIdGenerator.getUniqueId"]
+    C --> D["PaymentService.setPayoutRequestIdToRedis(id, valid)"]
+    D --> E["PaymentService.getPayoutRequestIdFromRedis(id)"]
+    E --> F{"Redis value == valid?"}
+    F -- Yes --> G["Return 200 with payout_request_id"]
+    F -- No --> H["Return platform error response"]
+    D -- Redis error --> H
+```
 
 **Request:** Empty body
 
@@ -254,26 +273,59 @@
 
 **Purpose:** Pre-flight validation of beneficiary bank account details before initiating payout
 
+**Service Flow:**
+
+```mermaid
+flowchart TD
+    A["SDK / Consumer"] --> B["AccountValidationController.validateAccountDetails"]
+    B --> C["AuditService.saveRequestAndResponse"]
+    C --> D["AccountValidationService.validateAccountDetails"]
+    D --> E{"account_type"}
+
+    E -- BANK --> F["Build BankDetails and run bean validation"]
+    F --> G["BankAccountService lookup by account_number + ifsc"]
+    G --> H{"Missing, failed, or expired?"}
+    H -- No --> I["Use existing BankAccount"]
+    H -- Yes --> J["Acquire DB lock by account number"]
+    J --> K["Recheck bank account"]
+    K --> L{"Still missing or failed?"}
+    L -- Yes --> M["PayoutVendorApiUtil.validateBankDetails"]
+    M --> N["Update BankAccount status and verified name"]
+    L -- No --> I
+    N --> O["Release lock"]
+    I --> P{"Bank status"}
+    O --> P
+    P -- VALID --> Q["FuzzyMatchService compares input and verified holder name"]
+    Q --> R["Return match_ratio and verified_account_holder_name"]
+    P -- INVALID --> S["Throw InvalidBankAccountException"]
+    P -- FAILED --> T["Throw BankValidationFailedException"]
+
+    E -- UPI --> U["Build UpiVpaDetails and run bean validation"]
+    U --> V["Redis lock by VPA"]
+    V --> W["Validate/update UPI detail via vendor when needed"]
+    W --> X["Fuzzy match or central-refund shortcut"]
+    X --> R
+```
+
 **Request DTO: `AccountValidationRequestDTO`**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `account_number` | String | ✅ | Bank account number of the beneficiary |
-| `ifsc_code` | String | ✅ | IFSC code of the bank branch |
+| `ifsc` | String | ✅ for bank accounts | IFSC code of the bank branch |
 | `account_holder_name` | String | ✅ | Name of the account holder |
-| `account_type` | String | ❌ | Type of account (e.g., "savings", "current") |
-| `entity_id` | String | ❌ | Beneficiary entity identifier |
+| `vpa` | String | ✅ for UPI | UPI VPA |
+| `account_type` | String | ✅ | Account type: `"bank"` or `"upi"` |
+| `payout_request_type` | String | ❌ | Payout flow type (e.g., `"auto_claim"`, `"central_refund"`) |
 
 **Response DTO: `AccountValidationResponseDTO`**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `validation_status` | String | Validation result (e.g., "valid", "invalid", "retry") |
-| `message` | String | Detailed validation message |
-| `account_holder_name` | String | Validated account holder name (if available) |
-| `validation_source` | String | Source of validation (e.g., "nbin", "manual") |
+| `match_ratio` | Double | Match ratio between provided and verified holder name |
+| `verified_account_holder_name` | String | Account holder name returned by validation |
 
-**HTTP Response:** `ResponseEntity<AccountValidationResponseDTO>`
+**HTTP Response:** `ResponseEntity<ValidateAccountDetailsRes>`
 
 **Status Codes:**
 - `200 OK` - Validation completed (may be valid or invalid)
@@ -291,6 +343,25 @@
 
 **Purpose:** Validate IFSC (Indian Financial System Code) code
 
+**Service Flow:**
+
+```mermaid
+flowchart TD
+    A["SDK / Consumer"] --> B["IfscValidationController.validateIfsc"]
+    B --> C["Validate IFSC against Constants.IFSC_REGEX"]
+    C --> D["IfscValidateService.validateIfscWithLock"]
+    D --> E["Acquire Redis lock: ifsc_detail_{ifsc}"]
+    E --> F["IfscRepository.findByIfsc(upper(ifsc))"]
+    F --> G{"IFSC exists in DB?"}
+    G -- Yes --> H["Map DB row to response data"]
+    G -- No --> I["PayoutVendorApiUtil.validateIfscDetails"]
+    I --> J["Save IfscDetail to DB"]
+    J --> H
+    E -- Lock failure --> K["Fallback to validateIfscDetails without lock"]
+    K --> F
+    H --> L["Return success=true with bank branch data"]
+```
+
 **Query Parameters:**
 
 | Parameter | Type | Required | Description |
@@ -301,11 +372,27 @@
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `ifsc_code` | String | The validated IFSC code |
-| `bank_name` | String | Name of the bank |
-| `branch_name` | String | Name of the branch |
-| `is_valid` | Boolean | Whether the IFSC is valid |
-| `error_message` | String | Error message if invalid |
+| `success` | Boolean | Whether IFSC lookup succeeded |
+| `data.ifsc` | String | The validated IFSC code |
+| `data.name` | String | Name of the bank |
+| `data.address` | String | Branch address |
+| `data.city` | String | Branch city |
+| `data.state` | String | Branch state |
+
+Example response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "ifsc": "SBIN0017118",
+    "name": "State Bank of India",
+    "address": "VILLAGE AND POST KHARGONE,TEHSIL BARELI,DISTT.RAISEN.MADHYA PRADESH 464671",
+    "city": "BARELI",
+    "state": "MADHYA PRADESH"
+  }
+}
+```
 
 **HTTP Response:** `ResponseEntity<IfscVerificationResponseDTO>`
 
@@ -319,68 +406,116 @@
 
 ### 4. Initiate Payout
 
-**Endpoint:** `POST /api/v2/initiate_payout`
+**V2 Endpoint:** `POST /api/v2/initiate_payout`
+
+**V1 Endpoint:** `POST /api/initiate_payout/`
+
+SDK mapping:
+
+| SDK method | Platform path |
+|------------|---------------|
+| `paymentClient.payout().initiate(request)` | `POST /api/v2/initiate_payout` |
+| `paymentClient.payout().initiateV1(request)` | `POST /api/initiate_payout/` |
 
 **Purpose:** Submit a payout request to transfer funds to beneficiary
+
+**Service Flow:**
+
+```mermaid
+flowchart TD
+    A["SDK / Consumer"] --> B{"Endpoint"}
+
+    B -- "V1 /api/initiate_payout/" --> C["AuthenticationFilter"]
+    C --> D["Read okind from request body"]
+    D --> E["Validate internal cookie and okind permission"]
+    E --> F["Set requested_by_id request attribute"]
+
+    B -- "V2 /api/v2/initiate_payout" --> G["AuthFilterV2"]
+    G --> H["Validate request body"]
+    H --> I["Read requested_by_id from body"]
+    I --> J["AuthService.getUserByEmail + permission check"]
+
+    F --> K["PaymentController.createPayment"]
+    J --> L["PaymentController.createPaymentV2"]
+    K --> M["PaymentService.createPayment"]
+    L --> M
+
+    M --> N["Decode oid and validate exactly one of payout_request_id or unique_id"]
+    N --> O{"payout_request_id present?"}
+    O -- Yes --> P["Check Redis marker, then lookup by payout_request_id"]
+    O -- No --> Q["Lookup by unique_id"]
+    P --> R{"Duplicate payout found?"}
+    Q --> R
+    R -- Yes --> S["Encrypt existing payment id and return success"]
+    R -- No --> T["Optional checksum duplicate check"]
+    T --> U["Validate payment mode, instrument, and transfer_mode"]
+    U --> V["Save PayoutRequest"]
+    V --> W["Vendor workflow initiatePayment"]
+    W --> X{"Vendor initiate success?"}
+    X -- Yes --> Y["Delete payout_request_id from Redis, audit payout attempt"]
+    Y --> Z["Build success response with encrypted payment id"]
+    X -- No --> AA["Set failure reason and retry metadata, save PayoutRequest"]
+    AA --> AB["Build 201-style message: retry is in process"]
+    Z --> AC["Audit request and response"]
+    AB --> AC
+    AC --> AD["Return response"]
+```
 
 **Request DTO: `InitiatePayoutRequestDTO`**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `okind` | String | ✅ | Origin kind/source identifier (e.g., "jarvis", "artemis", "claim-management") |
-| `oid` | Long/String | ✅ | Origin ID (e.g., claim ID, policy ID, order ID from source system) |
-| `payment_type` | String | ✅ | Type of payment (e.g., "claim", "refund", "settlement") |
+| `okind` | String | ✅ | Origin kind/source identifier (e.g., `"work"`, `"jarvis"`, `"firefly"`, `"central_payout"`) |
+| `oid` | String | ✅ | Origin ID (e.g., claim ID, policy ID, order ID from source system) |
 | `amount` | BigDecimal | ✅ | Payout amount in decimal format |
-| `requested_by_id` | String | ✅ | User/system ID requesting the payout |
+| `creator_notes` | String | ❌ | Free-form creator notes |
 | `entity_type` | String | ✅ | Type of beneficiary entity (e.g., "customer", "vendor", "advisor") |
-| `entity_id` | String | ✅ | Unique identifier of the beneficiary entity |
+| `entity_id` | Long | ✅ | Unique numeric identifier of the beneficiary entity |
 | `entity_subtype` | String | ❌ | Sub-type of entity (e.g., "individual", "business") |
-| `callback_url` | String | ✅ | Webhook URL for payout status notifications |
-| `payment_mode` | String | ✅ | Payment mode (e.g., "neft", "rtgs", "imps", "bank_transfer") |
 | `payment_instrument` | PaymentInstrument | ✅ | Beneficiary bank account details (see below) |
-| `parent_payment_id` | Long | ❌ | Parent payment ID for tracking refund chains |
-| `payout_request_id` | String | ❌ | Previously generated payout request ID (if updating) |
+| `payment_mode` | String | ✅ | Payment mode: `"bank"`, `"beneficiary_id"`, `"paytm"`, `"upi"`, `"amazon_pay"` |
+| `callback_url` | String | ❌ | Webhook URL for payout status notifications |
 | `unique_id` | String | ❌ | Unique identifier for idempotency |
+| `payment_type` | String | ❌ | Type of payment; defaults to `"claim"` |
+| `parent_payment_id` | Long | ❌ | Parent payment ID for tracking retry/refund chains |
+| `payment_task_id` | Long | ❌ | Internal payment task identifier |
+| `requested_by_id` | String | ❌ | User/system ID requesting the payout |
+| `payout_request_id` | String | ❌ | Previously generated payout request ID |
+| `payout_lob` | String | ❌ | Payout line of business |
 
 **PaymentInstrument Structure:**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `account_number` | String | ✅ | Beneficiary bank account number |
-| `ifsc_code` | String | ✅ | IFSC code of the bank branch |
-| `account_holder_name` | String | ✅ | Name of the account holder |
-| `account_type` | String | ❌ | Account type (e.g., "savings", "current") |
-| `beneficiary_id` | String | ❌ | Unique ID of the beneficiary |
+| `ifsc` | String | ✅ for bank accounts | IFSC code of the bank branch |
+| `account_holder` | String | ❌ | Account holder name |
+| `lob_reference_no` | String | ❌ | LOB reference number; also accepts `claim_number` |
+| `user_phone` | String | ❌ | Beneficiary phone |
+| `user_email` | String | ❌ | Beneficiary email |
+| `input_email` | String | ❌ | Input email |
+| `vpa` | String | ✅ for UPI | UPI VPA |
+| `transfer_mode` | String | ❌ | Transfer mode; also accepts `transferMode` |
 
 **Response DTO: `InitiatePayoutResponseDTO`**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `payout_request_id` | String | Payout request identifier |
-| `status` | String | Payout status (e.g., "payout_initiated", "created", "initiated") |
-| `amount` | BigDecimal | Payout amount |
-| `request_id` | String | Request identifier |
-| `verification` | VerificationDetails | Verification results (see below) |
-| `validation` | ValidationDetails | Validation results (see below) |
-| `lob` | String | Line of Business |
-| `journey` | String | Journey type |
-| `reference_id` | String | Reference identifier |
-| `redirection_url` | String | URL for redirect (if applicable) |
+| `success` | Boolean | Whether request creation succeeded |
+| `result.id` | String | Payment key/id returned by payout-service |
+| `result.message` | String | Optional message |
 
-**VerificationDetails Structure:**
+Example response:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `payee_name` | String | Verified payee/account holder name |
-| `verified_name` | String | Name verified through NBIN/validation service |
-| `result` | String | Verification result (e.g., "success", "failed", "mismatch") |
-
-**ValidationDetails Structure:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `result` | String | Validation result (e.g., "success", "failed") |
-| `message` | String | Validation message |
+```json
+{
+  "success": true,
+  "result": {
+    "id": "payment-ekey-1",
+    "message": null
+  }
+}
+```
 
 **HTTP Response:** `ResponseEntity<InitiatePayoutResponseDTO>`
 
@@ -401,6 +536,35 @@
 
 **Purpose:** Update payout details after creation (e.g., change amount or beneficiary details)
 
+**Service Flow:**
+
+```mermaid
+flowchart TD
+    A["SDK / Consumer"] --> B["AuthFilterV2 for /api/v2/update_payout_details"]
+    B --> C["Deserialize and validate UpdatePayoutRequest"]
+    C --> D["PayoutRequestRepository.findById(id)"]
+    D --> E{"Parent payout exists?"}
+    E -- No --> F["Return error: no_payment_object"]
+    E -- Yes --> G["Set PAYMENT_OBJ request attribute"]
+    G --> H["AuthService.getUserByEmail(requested_by_id)"]
+    H --> I["Check permission for parent okind"]
+    I --> J["PaymentController.updatePayoutDetailsV2"]
+    J --> K["PaymentService.updatePayoutDetails"]
+    K --> L["Validate updated payment instrument"]
+    L --> M{"Parent or retry already COMPLETED?"}
+    M -- Yes --> N["Reject update"]
+    M -- No --> O["Fetch existing retries by payout_request_id or unique_id"]
+    O --> P{"Latest status is FAILED, PENDING_FROM_CUSTOMER, or REVERSED?"}
+    P -- No --> Q["Reject invalid update state"]
+    P -- Yes --> R["Generate new unique_id and rebuild PaymentRequest"]
+    R --> S["Validate runtime payment mode and request"]
+    S --> T["Save new PayoutRetries row"]
+    T --> U["Reset parent status to CREATED and update retry metadata"]
+    U --> V["Mark older non-reversed retries as FAILED"]
+    V --> W["Save parent PayoutRequest"]
+    W --> X["Return update response with updated payment object"]
+```
+
 **Request DTO: `UpdatePayoutRequestDTO`**
 
 | Field | Type | Required | Description |
@@ -409,17 +573,23 @@
 | `amount` | BigDecimal | ✅ | Updated payout amount |
 | `payment_instrument` | PaymentInstrument | ✅ | Updated beneficiary bank account details |
 | `requested_by_id` | String | ✅ | User/system ID requesting the update |
-| `payment_mode` | String | ✅ | Updated payment mode |
+| `payment_mode` | String | ❌ | Updated payment mode: `"bank"`, `"beneficiary_id"`, `"paytm"`, `"upi"`, `"amazon_pay"` |
 | `callback_url` | String | ✅ | Updated webhook URL for notifications |
 
 **Response DTO: `UpdatePayoutResponseDTO`**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `payout_request_id` | String | Payout request identifier |
-| `status` | String | Updated payout status |
-| `amount` | BigDecimal | Updated payout amount |
-| `message` | String | Update confirmation message |
+| `success` | Boolean | Whether update succeeded |
+| `result.id` | Long | Payment id |
+| `result.oid` | Long | Origin id after decoding |
+| `result.okind` | String | Origin kind |
+| `result.amount` | String | Updated payout amount |
+| `result.status` | String | Updated retry/status value |
+| `result.paymentInstrument` | String | Updated payment instrument JSON string |
+| `result.paymentMode` | String | Updated payment mode |
+| `result.payoutRequestId` | String | Payout request identifier |
+| `result.paymentType` | String | Payment type |
 
 **HTTP Response:** `ResponseEntity<UpdatePayoutResponseDTO>`
 
@@ -438,6 +608,21 @@
 
 **Purpose:** Sync payout status and verification details
 
+**Service Flow:**
+
+```mermaid
+flowchart TD
+    A["SDK / Consumer"] --> B["PaymentController.verifyPayout"]
+    B --> C["PaymentService.verifyPayout"]
+    C --> D["PayoutRequestRepository.findByPayoutRequestId"]
+    D --> E{"Payout exists?"}
+    E -- No --> F["Throw InvalidInputException"]
+    E -- Yes --> G["SchedulerService.getStatus(payment id)"]
+    G --> H["Refresh latest vendor/platform status into payout record"]
+    H --> I["PaymentMapper.fromPayoutRequestToVerifyPayoutResponse"]
+    I --> J["Return snake_case payout status response"]
+```
+
 **Path Parameters:**
 
 | Parameter | Type | Description |
@@ -448,16 +633,22 @@
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `oid` | Long | Origin id after decoding |
+| `okind` | String | Origin kind |
 | `payout_request_id` | String | Payout request identifier |
-| `status` | String | Current payout status (e.g., "created", "initiated", "success", "failed", "pending") |
+| `status` | String | Current payout status (e.g., `"created"`, `"initiated"`, `"completed"`, `"failed"`, `"rejected"`) |
 | `amount` | BigDecimal | Payout amount |
-| `gateway_transaction_id` | String | Transaction ID from payment gateway |
-| `gateway_response` | String | Response from payment gateway |
-| `error_message` | String | Error message if payout failed |
-| `created_at` | String | ISO 8601 timestamp of creation |
-| `updated_at` | String | ISO 8601 timestamp of last update |
-| `verification_status` | String | Account verification status |
-| `verification_message` | String | Verification details message |
+| `created_on` | String | Creation timestamp |
+| `updated_on` | String | Last update timestamp |
+| `requested_by_id` | String | User/system ID that requested payout |
+| `creator_notes` | String | Creator notes |
+| `payment_instrument` | Object | Payment instrument object |
+| `payment_mode` | String | Payment mode |
+| `payment_type` | String | Payment type |
+| `failure_reason` | String | Failure reason if payout failed |
+| `source` | String | Payout source |
+| `utr` | String | UTR/reference from payment rails |
+| `retry_flag` | String | Retry eligibility/status flag |
 
 **HTTP Response:** `ResponseEntity<PayoutStatusDTO>`
 
@@ -472,8 +663,8 @@
 ## SDK Implementation Recommendations
 
 ### Authentication & Authorization
-- Implement **OAuth 2.0** or **API Key** based authentication based on Acko's requirements
-- Add bearer token management with automatic refresh
+- Payout APIs require the internal payout cookie via the `Cookie` header, for example `internalPayoutCookie=...`
+- S2S bearer token management is for payin/future APIs, not payout
 - Include request signing for sensitive operations
 
 ### Retry Strategy

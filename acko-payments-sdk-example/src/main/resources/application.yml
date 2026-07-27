@@ -1,0 +1,15 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+payment:
+  defaults:
+    timeout:
+      connect: ${PAYMENT_CONNECT_TIMEOUT:2s}
+      read: ${PAYMENT_READ_TIMEOUT:10s}
+    retry:
+      enabled: ${PAYMENT_RETRY_ENABLED:true}
+      max-attempts: ${PAYMENT_RETRY_MAX_ATTEMPTS:3}
+      backoff: ${PAYMENT_RETRY_BACKOFF:500ms}
+  payout:
+    base-url: ${PAYMENT_PAYOUT_BASE_URL:}
+    cookie-header: ${PAYMENT_PAYOUT_COOKIE_HEADER:user_id=${INTERNAL_PAYOUT_COOKIE_VALUE:}}
