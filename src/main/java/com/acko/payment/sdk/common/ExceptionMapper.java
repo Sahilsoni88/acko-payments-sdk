@@ -60,13 +60,20 @@ public final class ExceptionMapper {
         while (current != null) {
             if (current instanceof SocketTimeoutException
                     || current instanceof TimeoutException
-                    || (current.getMessage() != null
-                    && current.getMessage().toLowerCase().contains("timeout"))) {
+                    || hasTimeoutMessage(current)) {
                 return true;
             }
             current = current.getCause();
         }
         return false;
+    }
+
+    private static boolean hasTimeoutMessage(Throwable throwable) {
+        if (throwable.getMessage() == null) {
+            return false;
+        }
+        String message = throwable.getMessage().toLowerCase();
+        return message.contains("timeout") || message.contains("timed out");
     }
 
     private static String safeBody(FeignException exception) {

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import feign.Feign;
 import feign.Request;
+import feign.Retryer;
 import feign.jackson.JacksonDecoder;
 import feign.jackson.JacksonEncoder;
 import feign.slf4j.Slf4jLogger;
@@ -38,6 +39,7 @@ public final class FeignClientFactory {
 
         return Feign.builder()
                 .options(options)
+                .retryer(Retryer.NEVER_RETRY)
                 .encoder(new JacksonEncoder(objectMapper))
                 .decoder(new JacksonDecoder(objectMapper))
                 .requestInterceptor(interceptor)

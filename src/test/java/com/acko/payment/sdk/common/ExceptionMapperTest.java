@@ -75,6 +75,23 @@ class ExceptionMapperTest {
     }
 
     @Test
+    void should_mapToTimeoutException_whenFeignRetryableMessageSaysTimedOut() {
+        // given
+        feign.RetryableException exception = new feign.RetryableException(
+                -1,
+                "Read timed out executing GET http://localhost/test",
+                Request.HttpMethod.GET,
+                (Long) null,
+                feignRequest());
+
+        // when
+        RuntimeException mapped = mapper.map(exception);
+
+        // then
+        assertThat(mapped).isInstanceOf(PaymentTimeoutException.class);
+    }
+
+    @Test
     void should_mapToDownstream_whenUnknownCheckedWrapped() {
         // given
         Exception cause = new Exception("weird");
@@ -87,13 +104,7 @@ class ExceptionMapperTest {
     }
 
     private static FeignException feignStatus(int status, String body) {
-        Request request = Request.create(
-                Request.HttpMethod.GET,
-                "http://localhost/test",
-                Collections.emptyMap(),
-                null,
-                StandardCharsets.UTF_8,
-                null);
+        Request request = feignRequest();
         return FeignException.errorStatus(
                 "test",
                 feign.Response.builder()
@@ -103,5 +114,15 @@ class ExceptionMapperTest {
                         .headers(Collections.emptyMap())
                         .body(body, StandardCharsets.UTF_8)
                         .build());
+    }
+
+    private static Request feignRequest() {
+        return Request.create(
+                Request.HttpMethod.GET,
+                "http://localhost/test",
+                Collections.emptyMap(),
+                null,
+                StandardCharsets.UTF_8,
+                null);
     }
 }

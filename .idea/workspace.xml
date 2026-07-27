@@ -4,17 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="59cac245-c838-4562-b53b-3a65770c144b" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/docs/03-lld.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/03-lld.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/04-integration-guide.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/04-integration-guide.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/auth/AuthService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/auth/AuthService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/auth/TokenManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/auth/TokenManager.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/AccessTokenHolder.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/AccessTokenHolder.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/PaymentFeignInterceptor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/PaymentFeignInterceptor.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/RetryExecutor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/RetryExecutor.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/factory/PaymentClientFactory.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/factory/PaymentClientFactory.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/payout/DefaultPaymentClient.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/payout/DefaultPaymentClient.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/test/java/com/acko/payment/sdk/common/RetryExecutorTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/test/java/com/acko/payment/sdk/common/RetryExecutorTest.java" afterDir="false" />
+    <list default="true" id="59cac245-c838-4562-b53b-3a65770c144b" name="Changes" comment="Retry update">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/ExceptionMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/ExceptionMapper.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/FeignClientFactory.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/acko/payment/sdk/common/FeignClientFactory.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/test/java/com/acko/payment/sdk/common/ExceptionMapperTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/test/java/com/acko/payment/sdk/common/ExceptionMapperTest.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -40,6 +34,7 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "Application.Main.executor": "Run",
+    "JUnit.PaymentSdkMockE2ETest.executor": "Run",
     "Maven.acko-payments-sdk [clean,compile].executor": "Run",
     "Maven.acko-payments-sdk [clean,install].executor": "Run",
     "Maven.acko-payments-sdk [clean,package].executor": "Run",
@@ -51,7 +46,7 @@
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "develop/sdk-v0.1.0-SNAPSHOT",
+    "git-widget-placeholder": "develop/sdk-v0.1.1-SNAPSHOT",
     "kotlin-language-version-configured": "true",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
@@ -73,7 +68,7 @@
       <command value="mvn clean package" />
     </option>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="JUnit.PaymentSdkMockE2ETest">
     <configuration name="Main" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
       <option name="MAIN_CLASS_NAME" value="com.acko.Main" />
       <module name="acko-payments-sdk" />
@@ -87,8 +82,24 @@
         <option name="Make" enabled="true" />
       </method>
     </configuration>
+    <configuration name="PaymentSdkMockE2ETest" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
+      <module name="acko-payments-sdk" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.acko.payment.sdk.e2e.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <option name="PACKAGE_NAME" value="com.acko.payment.sdk.e2e" />
+      <option name="MAIN_CLASS_NAME" value="com.acko.payment.sdk.e2e.PaymentSdkMockE2ETest" />
+      <option name="TEST_OBJECT" value="class" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="JUnit.PaymentSdkMockE2ETest" />
         <item itemvalue="Application.Main" />
       </list>
     </recent_temporary>
@@ -101,9 +112,22 @@
       <option name="presentableId" value="Default" />
       <updated>1784544262112</updated>
     </task>
+    <task id="LOCAL-00001" summary="Retry update">
+      <option name="closed" value="true" />
+      <created>1785131297651</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1785131297652</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Retry update" />
+    <option name="LAST_COMMIT_MESSAGE" value="Retry update" />
   </component>
 </project>
