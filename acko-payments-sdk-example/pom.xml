@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.acko</groupId>
         <artifactId>acko-payments-sdk-parent</artifactId>
-        <version>0.1.1-SNAPSHOT</version>
+        <version>0.1.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -24,7 +24,7 @@
     <dependencies>
         <dependency>
             <groupId>com.acko</groupId>
-            <artifactId>acko-payments-sdk</artifactId>
+            <artifactId>acko-payments-sdk-core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

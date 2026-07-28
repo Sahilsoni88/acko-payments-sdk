@@ -1,6 +1,6 @@
 # Payment SDK — Overview
 
-**Current release line:** `0.1.1-SNAPSHOT` (v0) — **payout only**. Payin and refund APIs are planned for later minor releases.
+**Current release line:** `0.1.0` (v0) — **payout only**. Payin and refund APIs are planned for later minor releases.
 
 ## What is it?
 
@@ -96,6 +96,6 @@ Any internal Java Spring Boot service that needs to interact with the Central Pa
 
 ```
 acko-payments-sdk/
-├── acko-payments-sdk-core     # published SDK artifact: com.acko:acko-payments-sdk
+├── acko-payments-sdk-core     # published SDK artifact: com.acko:acko-payments-sdk-core
 └── acko-payments-sdk-example  # local Spring Boot manual-test app, not deployed
 ```

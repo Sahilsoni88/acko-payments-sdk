@@ -1,0 +1,155 @@
+{
+  "info": {
+    "_postman_id": "1cc4d518-f14d-46fd-b2f2-f73dfb0894a5",
+    "name": "Acko Payments SDK Example - Payout APIs",
+    "description": "Clean endpoint collection for the acko-payments-sdk-example payout controller. Import into Apidog as a Postman collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "payout_request_id",
+      "value": ""
+    },
+    {
+      "key": "payout_numeric_id",
+      "value": "12345"
+    }
+  ],
+  "item": [
+    {
+      "name": "Verify IFSC",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/test/paymentsdk/payout/ifsc?ifsc=SBIN0017118"
+      }
+    },
+    {
+      "name": "Generate Payout Request ID",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/test/paymentsdk/payout/request-id"
+      }
+    },
+    {
+      "name": "Validate Bank Account",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_number\": \"replace_with_real_test_account\",\n  \"ifsc\": \"SBIN0017118\",\n  \"account_holder_name\": \"JOHN SNOW\",\n  \"account_type\": \"bank\",\n  \"payout_request_type\": \"auto_claim\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/test/paymentsdk/payout/validate-account"
+      }
+    },
+    {
+      "name": "Validate UPI",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_holder_name\": \"JOHN SNOW\",\n  \"vpa\": \"success@upi\",\n  \"account_type\": \"upi\",\n  \"payout_request_type\": \"auto_claim\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/test/paymentsdk/payout/validate-account"
+      }
+    },
+    {
+      "name": "Initiate Payout V2 - UPI",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"okind\": \"jarvis\",\n  \"oid\": \"12345\",\n  \"amount\": 1.00,\n  \"entity_type\": \"customer\",\n  \"entity_id\": 12345,\n  \"payment_mode\": \"upi\",\n  \"requested_by_id\": \"test@acko.com\",\n  \"payout_request_id\": \"{{payout_request_id}}\",\n  \"unique_id\": \"apidog-v2-manual-001\",\n  \"payment_type\": \"claim\",\n  \"callback_url\": \"http://dummy-url/test\",\n  \"payment_instrument\": {\n    \"vpa\": \"success@upi\",\n    \"account_holder\": \"JOHN SNOW\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/test/paymentsdk/payout/initiate-v2"
+      }
+    },
+    {
+      "name": "Initiate Payout V1 - UPI",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"okind\": \"jarvis\",\n  \"oid\": \"12345\",\n  \"amount\": 1.00,\n  \"entity_type\": \"customer\",\n  \"entity_id\": 12345,\n  \"payment_mode\": \"upi\",\n  \"requested_by_id\": \"test@acko.com\",\n  \"payout_request_id\": \"{{payout_request_id}}\",\n  \"unique_id\": \"apidog-v1-manual-001\",\n  \"payment_type\": \"claim\",\n  \"callback_url\": \"http://dummy-url/test\",\n  \"payment_instrument\": {\n    \"vpa\": \"success@upi\",\n    \"account_holder\": \"JOHN SNOW\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/test/paymentsdk/payout/initiate-v1"
+      }
+    },
+    {
+      "name": "Verify Payout",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/test/paymentsdk/payout/{{payout_request_id}}/verify"
+      }
+    },
+    {
+      "name": "Update Payout Details",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": {{payout_numeric_id}},\n  \"amount\": 1.00,\n  \"requested_by_id\": \"test@acko.com\",\n  \"payment_mode\": \"upi\",\n  \"callback_url\": \"http://dummy-url/test\",\n  \"payment_instrument\": {\n    \"vpa\": \"success@upi\",\n    \"account_holder\": \"JOHN SNOW\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/test/paymentsdk/payout/update"
+      }
+    }
+  ]
+}

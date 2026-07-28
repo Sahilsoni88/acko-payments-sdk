@@ -7,13 +7,13 @@
     <parent>
         <groupId>com.acko</groupId>
         <artifactId>acko-payments-sdk-parent</artifactId>
-        <version>0.1.1-SNAPSHOT</version>
+        <version>0.1.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>acko-payments-sdk</artifactId>
+    <artifactId>acko-payments-sdk-core</artifactId>
     <packaging>jar</packaging>
-    <name>Acko Payment SDK</name>
+    <name>Acko Payment SDK Core</name>
     <description>Internal SDK for abstracting all interactions with the Central Payment Platform</description>
 
     <dependencies>

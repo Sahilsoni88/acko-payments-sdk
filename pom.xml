@@ -6,7 +6,7 @@
 
     <groupId>com.acko</groupId>
     <artifactId>acko-payments-sdk-parent</artifactId>
-    <version>0.1.1-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>Acko Payment SDK Parent</name>

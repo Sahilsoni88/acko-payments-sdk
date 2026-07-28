@@ -2,7 +2,7 @@
 
 This guide shows how a consumer service should use the SDK. Start here.
 
-**v0 (`0.1.1-SNAPSHOT`):** only `paymentClient.payout()` is available. Payin/refund sections below describe the target API and will apply once those surfaces ship.
+**v0 (`0.1.0`):** only `paymentClient.payout()` is available. Payin/refund sections below describe the target API and will apply once those surfaces ship.
 
 ---
 
@@ -28,12 +28,12 @@ Consumers should **only** inject `PaymentClient`. Never depend on Feign clients,
 ```xml
 <dependency>
     <groupId>com.acko</groupId>
-    <artifactId>acko-payments-sdk</artifactId>
-    <version>0.1.1-SNAPSHOT</version>
+    <artifactId>acko-payments-sdk-core</artifactId>
+    <version>0.1.0</version>
 </dependency>
 ```
 
-Resolve snapshots from Acko Nexus (dev).
+Resolve the artifact from Acko Nexus.
 
 ---
 
@@ -140,17 +140,19 @@ public class ClaimPayoutService {
                 .build()
         );
 
+        // response.getId() is payout-service result.id. It is different from payout_request_id.
+        // Keep payout_request_id for verify/status recovery.
         return idResponse.getPayoutRequestId();
     }
 }
 ```
 
-**Update after initiate** (e.g. corrected beneficiary details, when platform allows):
+**Update after initiate** (e.g. corrected beneficiary details, when platform allows). The update `id` is the numeric payout/payment id from payout-service state, not the string `payout_request_id`:
 
 ```java
 paymentClient.payout().updatePayoutDetails(
     UpdatePayoutDetailsRequest.builder()
-        .id(Long.valueOf(payoutRequestId))
+        .id(paymentNumericId)
         .amount(updatedAmount)
         .paymentInstrument(updatedInstrument)
         .requestedById(requestedById)
@@ -301,7 +303,7 @@ public MetricsHook paymentMetricsHook(MeterRegistry registry) {
 
 ## 9. Minimal Checklist for a New Integrator (v0)
 
-1. Add SDK dependency (`0.1.1-SNAPSHOT`)  
+1. Add SDK dependency (`0.1.0`)  
 2. Configure `payment.payout.base-url` and `payment.payout.cookie-header`  
 3. Inject `PaymentClient` (or use `PaymentClientFactory` without Spring)  
 4. Implement payout end-to-end (validate → generate id → initiate → verify on timeout)  

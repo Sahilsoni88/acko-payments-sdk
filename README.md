@@ -6,7 +6,7 @@ One entry point — `PaymentClient` — with payout cookie auth, retries, timeou
 
 | | |
 |---|---|
-| **Artifact** | `com.acko:acko-payments-sdk:0.1.1-SNAPSHOT` |
+| **Artifact** | `com.acko:acko-payments-sdk-core:0.1.0` |
 | **Java** | 21+ |
 | **Spring** | Optional (Boot 3.x auto-config) |
 | **v0 scope** | Payout only (`paymentClient.payout()`) |
@@ -34,12 +34,12 @@ The SDK centralizes that so Claims, Policy, Motor, Health, and others share one 
 ```xml
 <dependency>
     <groupId>com.acko</groupId>
-    <artifactId>acko-payments-sdk</artifactId>
-    <version>0.1.1-SNAPSHOT</version>
+    <artifactId>acko-payments-sdk-core</artifactId>
+    <version>0.1.0</version>
 </dependency>
 ```
 
-Resolve snapshots from Acko Nexus (dev).
+Resolve the artifact from Acko Nexus.
 
 ### 2. Configuration
 
@@ -219,6 +219,13 @@ Example endpoints:
 | POST | `/api/test/paymentsdk/payout/initiate-v1` |
 | POST | `/api/test/paymentsdk/payout/update` |
 | GET | `/api/test/paymentsdk/payout/{payoutRequestId}/verify` |
+
+Apidog/Postman import files:
+
+| File | Purpose |
+|---|---|
+| [`docs/apidog-payout-example.postman_collection.json`](docs/apidog-payout-example.postman_collection.json) | Clean endpoint collection for manual calls |
+Apidog imports Postman collections as endpoint cases. To run them together, create a Test Scenario in Apidog, then add steps from the imported endpoint cases in the required order.
 
 ---
 

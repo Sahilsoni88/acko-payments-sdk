@@ -24,14 +24,14 @@ com.acko.payment.sdk
 ├── events/         → Optional hooks / constants related to payment events (no SQS listeners)
 ├── exception/      → SDK exception hierarchy
 ├── model/          → Shared value objects (Money, PaymentStatus, PaymentMode)
-├── payin/          → Payin + refund models (post-v0)
+├── payin/          → Reserved for payin + refund models (post-v0)
 ├── payout/         → Payout models, PayoutFeignClient, DefaultPayoutService
 └── util/           → MaskingUtils, CorrelationIdHolder
 ```
 
 > Core packages must remain Spring-free. Spring types live only under `spring/`.
 
-> Refund request/response models live under `payin/` and are exposed through `PayinOperations`.
+> Payin/refund request/response models will live under `payin/` and be exposed through `PayinOperations` after v0.
 
 ---
 
@@ -39,16 +39,16 @@ com.acko.payment.sdk
 
 | Layer | Classes | Rule |
 |---|---|---|
-| **Public API** | `PaymentClient`, `PayoutOperations`, `PayinOperations` | Interface only |
-| **Service** | `DefaultPayoutService`, `DefaultPayinService` | API → `RequestContext` + Feign call |
+| **Public API** | `PaymentClient`, `PayoutOperations` | Interface only in v0 |
+| **Service** | `DefaultPayoutService` | API → `RequestContext` + Feign call |
 | **Infrastructure** | `RequestExecutor`, `RetryExecutor`, `ExceptionMapper` | Cross-cutting concerns |
 | **Auth** | `CookieHolder`, `TokenManager`, `TokenStore`, `AuthService` | Payout Cookie lifecycle + future S2S token lifecycle |
-| **Feign** | `PayoutFeignClient`, `PayinFeignClient` | HTTP mapping only; package-private |
+| **Feign** | `PayoutFeignClient` | HTTP mapping only; package-private |
 | **Config** | `PaymentProperties`, `ConfigResolver` | Hierarchical config |
 
 ---
 
-## Public Operations (target API)
+## Public Operations
 
 ### `PayoutOperations`
 - `generatePayoutRequestId() → GeneratePayoutRequestIdResponse`
@@ -59,7 +59,7 @@ com.acko.payment.sdk
 - `updatePayoutDetails(UpdatePayoutDetailsRequest) → UpdatePayoutDetailsResponse`
 - `verify(String payoutRequestId) → VerifyPayoutResponse`
 
-### `PayinOperations`
+### `PayinOperations` (post-v0 target)
 - `createOrder(CreateOrderRequest) → CreateOrderResponse`
 - `verify(String orderId) → VerifyPayinResponse`
 - `verifyV2(String orderId) → VerifyPayinResponse`
@@ -81,7 +81,7 @@ com.acko.payment.sdk
 | verify | GET | `/api/{payout_request_id}/verify` |
 | generatePayoutRequestId | POST | `/api/generate_payout_request_id` |
 
-### `PayinFeignClient`
+### `PayinFeignClient` (post-v0 target)
 | Operation | HTTP | Path |
 |---|---|---|
 | createOrder | POST | `/payments/order-details-ekey` |
@@ -118,7 +118,7 @@ sequenceDiagram
     PS-->>C: InitiatePayoutResponse
 ```
 
-Refund create/initiate follows the same path via `DefaultPayinService` → `PayinFeignClient` → `/refund/*`.
+Payin/refund will follow the same path post-v0 via `DefaultPayinService` → `PayinFeignClient` → payin/refund platform endpoints.
 
 ---
 
@@ -201,7 +201,8 @@ Refund calls use **`payment.payin`** timeouts/retry (same Feign client).
 
 | Class Type | Visibility |
 |---|---|
-| `PaymentClient`, `PayoutOperations`, `PayinOperations`, request/response models, exceptions | `public` |
+| `PaymentClient`, `PayoutOperations`, payout request/response models, exceptions | `public` in v0 |
+| `PayinOperations`, payin/refund request/response models | `public` post-v0 target |
 | Default services, Feign clients, token internals | `package-private` |
 
 ---

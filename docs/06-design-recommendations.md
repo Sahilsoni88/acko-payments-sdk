@@ -1,6 +1,6 @@
 # Payment SDK — Design Recommendations
 
-Design guidance for the consumer-facing SDK. Start from how teams will use it, then derive internals.
+Design guidance for the consumer-facing SDK. Start from how teams will use it, then derive internals. In v0, only `payout()` is available; `payin()` and refund methods are post-v0 target design.
 
 Related: [04-integration-guide.md](./04-integration-guide.md), [02-api-contracts.md](./02-api-contracts.md)
 
@@ -8,13 +8,13 @@ Related: [04-integration-guide.md](./04-integration-guide.md), [02-api-contracts
 
 ## 1. Design principle: mirror the platform
 
-Public API has exactly two surfaces — same as the platform:
+Target public API has exactly two surfaces — same as the platform. v0 ships payout only.
 
 ```text
 Consumer mental model          Platform reality
 ─────────────────────          ────────────────
-payout()                  →    PayoutServiceClient
-payin()                   →    PayinServiceClient
+payout()                  →    PayoutServiceClient       (v0)
+payin()                   →    PayinServiceClient        (post-v0)
                              (orders · verify · refund)
 ```
 
@@ -35,7 +35,7 @@ PaymentClient
 │     ├── updatePayoutDetails(...)
 │     └── verify(payoutRequestId)
 │
-└── payin()   → PayinOperations
+└── payin()   → PayinOperations          // post-v0
       ├── createOrder(...)          // order-details-ekey
       ├── verify(orderId)           // legacy
       ├── verifyV2(orderId)         // preferred for new products
@@ -48,8 +48,8 @@ PaymentClient
 | Choice | Rationale |
 |---|---|
 | Single `PaymentClient` | One bean to inject; easy discovery |
-| Only `payout()` + `payin()` | 1:1 with platform clients |
-| Refund under `payin()` | Matches `PayinServiceClient` ownership |
+| `payout()` now, `payin()` post-v0 | 1:1 with platform clients |
+| Refund under `payin()` post-v0 | Matches `PayinServiceClient` ownership |
 | Explicit `verify` / `verifyV2` | Matches platform; no silent version switching |
 | Validation helpers on payout | Encourages safe pre-flight before money movement |
 | No async poller in SDK | Keeps SDK stateless; events stay outside |
@@ -92,7 +92,7 @@ sequenceDiagram
 3. On timeout → `verify`, never blind retry of initiate unless platform guarantees idempotency  
 4. Drive business completion from SQS
 
-### Journey B — Payin (Policy / premium collection)
+### Journey B — Payin (Policy / premium collection, post-v0)
 
 ```mermaid
 sequenceDiagram
@@ -118,7 +118,7 @@ sequenceDiagram
 2. Callback ≠ final truth; confirm with verify and/or event  
 3. Store `order_id` + `reference_id` immediately after create
 
-### Journey C — Refund (via payin)
+### Journey C — Refund (via payin, post-v0)
 
 ```mermaid
 sequenceDiagram
@@ -145,7 +145,7 @@ sequenceDiagram
 ## 4. Alternatives considered
 
 ### Option A — Mirror platform (recommended)
-Only `payout()` and `payin()`, with refund methods on `PayinOperations`.
+Expose `payout()` in v0; add `payin()` post-v0 with refund methods on `PayinOperations`.
 
 **Pros:** 1:1 with platform, no fake third capability  
 **Cons:** refunds are not a top-level entry (acceptable — they are payin APIs)
@@ -198,7 +198,7 @@ payment:
   auth: { ... }
   defaults: { timeout, retry }
   payout: { base-url, timeout?, retry? }
-  payin:  { base-url, timeout?, retry? }   # includes refund endpoints
+  payin:  { base-url, timeout?, retry? }   # post-v0; includes refund endpoints
 ```
 
 Do not add `payment.refund.*`.
@@ -207,9 +207,9 @@ Do not add `payment.refund.*`.
 
 ## 8. Package / module design
 
-- Refund models live in the `payin` package  
-- Refund methods live on `PayinOperations` / `DefaultPayinService`  
-- One Feign interface per platform service  
+- Refund models will live in the `payin` package post-v0
+- Refund methods will live on `PayinOperations` / `DefaultPayinService` post-v0
+- One Feign interface per platform service as each surface ships
 - Shared `RequestExecutor` pipeline for all calls  
 
 ---
@@ -217,8 +217,8 @@ Do not add `payment.refund.*`.
 ## 9. What to optimize for first
 
 1. **Payout happy path + verify recovery** (highest misuse risk: double payout)  
-2. **Payin createOrder + verifyV2**  
-3. **Payin createRefund → initiateRefund**  
+2. **Payin createOrder + verifyV2** (post-v0)
+3. **Payin createRefund → initiateRefund** (post-v0)
 4. Validation helpers (`ifsc`, account details)  
 5. Metrics / advanced observability  
 
@@ -229,9 +229,9 @@ Do not add `payment.refund.*`.
 | Decision | Recommendation |
 |---|---|
 | Entry point | Single `PaymentClient` |
-| Public grouping | `payout()` / `payin()` only |
-| Refund API | `payin().createRefund` / `payin().initiateRefund` |
-| HTTP clients | Payout + Payin only |
+| Public grouping | `payout()` in v0; `payin()` post-v0 |
+| Refund API | `payin().createRefund` / `payin().initiateRefund` post-v0 |
+| HTTP clients | `PayoutFeignClient` in v0; `PayinFeignClient` post-v0 |
 | Status model | Sync verify for recovery; SQS for final state |
 | Versioned verify | Explicit `verify` and `verifyV2` methods |
 | Scope boundary | No business workflows, no SQS listeners inside SDK |
